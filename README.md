@@ -28,15 +28,16 @@ To maintain engineering transparency, the table below delineates current project
 | Capability Area | Status | Description |
 |---|---|---|
 | **Project Foundation & Architecture (Phase 0)** | **Implemented** | Repository directory structure, configuration templates (`.env.example`), `.gitignore`, Architectural Decision Records ([docs/decisions.md](docs/decisions.md)), and full system architecture specification ([docs/architecture.md](docs/architecture.md)). |
-| **Document Ingestion Pipeline** | *Planned (Phase 1)* | PDF/text extraction, cleaning, fixed and semantic chunking, embedding generation, Chroma indexing. |
-| **Retrieval Strategies (A–D)** | *Planned (Phase 2)* | Basic vector search, semantic chunking retrieval, hybrid BM25 + vector search, and cross-encoder reranking. |
-| **LLM Generation Pipeline** | *Planned (Phase 2)* | Prompt construction with context grounding, integration with NVIDIA-hosted Nemotron API. |
-| **Evaluation Engine & Metrics** | *Planned (Phase 3)* | Deterministic retrieval metrics (Hit Rate, Recall@k, MRR), RAGAS answer quality metrics, and latency profiling. |
-| **Frontend Web Application** | *Planned (Phase 4)* | React + TypeScript + Vite UI for document upload, query playground, experiment configuration, and metric dashboard. |
-| **CI/CD & Deployment** | *Planned (Phase 5)* | GitHub Actions automated test suites, regression gates, and cloud deployment pipelines. |
+| **Backend Foundation — FastAPI (Phase 1)** | **Implemented** | Application entry point and factory (`create_app`), Pydantic Settings configuration (`backend/app/config.py`), operational health endpoint (`GET /health`), CORS middleware allowlist, and pytest test suite. |
+| **Document Ingestion Pipeline** | *Planned (Phase 2)* | PDF/text extraction, cleaning, fixed and semantic chunking, embedding generation, Chroma indexing. |
+| **Retrieval Strategies (A–D)** | *Planned (Phase 3)* | Basic vector search, semantic chunking retrieval, hybrid BM25 + vector search, and cross-encoder reranking. |
+| **LLM Generation Pipeline** | *Planned (Phase 3)* | Prompt construction with context grounding, integration with NVIDIA-hosted Nemotron API. |
+| **Evaluation Engine & Metrics** | *Planned (Phase 4)* | Deterministic retrieval metrics (Hit Rate, Recall@k, MRR), RAGAS answer quality metrics, and latency profiling. |
+| **Frontend Web Application** | *Planned (Phase 5)* | React + TypeScript + Vite UI for document upload, query playground, experiment configuration, and metric dashboard. |
+| **CI/CD & Deployment** | *Planned (Phase 6)* | GitHub Actions automated test suites, regression gates, and cloud deployment pipelines. |
 
 > [!NOTE]
-> *Current Phase Status:* The project foundation is currently established. Application functionality, pipeline execution, and model APIs are not yet implemented.
+> *Current Phase Status:* Phase 0 and Phase 1 are implemented. The FastAPI web service foundation and test suite are operational. Document ingestion, RAG retrieval pipelines, and model APIs are planned for upcoming phases.
 
 ---
 
@@ -251,6 +252,7 @@ All architectural trade-offs, technology choices, and provisional decisions are 
 - **[ADR-007](docs/decisions.md#adr-007-retrieval-configurations--multi-strategy-comparable-experiments):** Retrieval Configurations — Multi-Strategy Comparable Experiments
 - **[ADR-008](docs/decisions.md#adr-008-experiment-history-persistence--optional-postgresql):** Experiment History Persistence — Optional PostgreSQL
 - **[ADR-009](docs/decisions.md#adr-009-deployment-targets--vercel-frontend-and-renderrailway-backend):** Deployment Targets — Vercel (Frontend) and Render/Railway (Backend)
+- **[ADR-010](docs/decisions.md#adr-010-backend-structure-pydantic-settings-and-health-endpoint-scope):** Backend Structure, Pydantic Settings, and Health Endpoint Scope
 
 Full ADR descriptions, rationale, and alternatives considered are maintained in [docs/decisions.md](docs/decisions.md).
 
@@ -258,8 +260,8 @@ Full ADR descriptions, rationale, and alternatives considered are maintained in 
 
 ## 9. Testing and CI Strategy
 
-- **Unit Testing (Backend):** Pytest test suites covering document parsing, text normalization, chunking boundary logic, and metric calculations (Hit Rate, Recall@k, MRR).
-- **Unit & Component Testing (Frontend):** Vitest and React Testing Library verifying parameter inputs, chart renders, and API mock handling.
+- **Unit Testing (Backend):** Pytest test suites covering configuration validation, CORS allowlist logic, and route status codes (implemented in Phase 1). Subsequent phases will add document parsing, chunking boundary logic, and metric calculations (Hit Rate, Recall@k, MRR).
+- **Unit & Component Testing (Frontend):** Vitest and React Testing Library verifying parameter inputs, chart renders, and API mock handling (planned for Phase 5).
 - **Integration Testing:** End-to-end evaluation flow validation with mock embeddings and mock LLM responses to ensure test determinism.
 - **Continuous Integration (GitHub Actions):** Automated linting (Ruff / ESLint), type checking (Mypy / TypeScript), test execution, and evaluation regression threshold gates.
 
@@ -267,16 +269,62 @@ Full ADR descriptions, rationale, and alternatives considered are maintained in 
 
 ## 10. Setup and Usage
 
-> [!NOTE]
-> *Status: Pending until Phase 1 implementation.*
+### Prerequisites
+- Python 3.11+ (Windows `py` launcher or `python`)
+- Node.js 18+ and npm (for upcoming frontend phase)
 
-### Prerequisites (Planned)
-- Python 3.11+
-- Node.js 18+ and npm
-- NVIDIA API Key for Nemotron access
+### 1. Environment Setup
 
-### Installation & Execution (Planned)
-Instructions will be added upon completion of Phase 1 and Phase 2. Environment variable templates are provided in [.env.example](.env.example).
+Copy the environment template to create your local `.env` file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### 2. Backend Virtual Environment & Installation
+
+From the repository root, create and activate a Python virtual environment:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the minimal Phase 1 dependencies:
+
+```powershell
+pip install -r backend/requirements.txt
+```
+
+### 3. Run Backend Tests
+
+Execute the pytest suite using the active virtual environment:
+
+```powershell
+pytest
+```
+
+### 4. Start the Development Server
+
+Launch the FastAPI application with auto-reload:
+
+```powershell
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 5. Verify the API
+
+- **Health Check Endpoint:** `http://localhost:8000/health`
+  Expected response:
+  ```json
+  {
+    "status": "ok",
+    "environment": "development",
+    "version": "0.1.0"
+  }
+  ```
+- **Interactive OpenAPI Documentation (Swagger UI):** `http://localhost:8000/docs`
+- **ReDoc Documentation:** `http://localhost:8000/redoc`
 
 ---
 

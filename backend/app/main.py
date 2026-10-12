@@ -1,0 +1,42 @@
+"""FastAPI Application entry point and factory."""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+try:
+    from backend.app.config import get_settings
+    from backend.app.api.routes.health import router as health_router
+except ImportError:
+    from app.config import get_settings
+    from app.api.routes.health import router as health_router
+
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application instance."""
+    settings = get_settings()
+
+    app = FastAPI(
+        title=settings.project_name,
+        version=settings.version,
+        description="Backend API service for the RAG Evaluation Harness.",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+    )
+
+    # Configure CORS middleware with environment-driven allowlist
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Register API routers
+    app.include_router(health_router)
+
+    return app
+
+
+app = create_app()

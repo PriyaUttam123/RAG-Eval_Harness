@@ -22,7 +22,7 @@ This document tracks the foundational architectural decisions for the **RAG Eval
 
 ## ADR-002: Backend Framework — Python with FastAPI and Pydantic
 
-- **Status:** Accepted (Provisional)
+- **Status:** Implemented (Phase 1 — Foundation)
 - **Context:** The backend must handle file ingestion, vector chunking, retrieval orchestration, LLM API communication, and metric computation.
 - **Decision:** Build the backend using **Python 3.11+** with **FastAPI** and **Pydantic v2**.
 - **Rationale:**
@@ -142,3 +142,23 @@ This document tracks the foundational architectural decisions for the **RAG Eval
 - **Alternatives Considered:**
   - *Single monolithic container on AWS ECS / DigitalOcean:* Viable, but higher operational overhead.
 - **Trade-offs:** Requires managing CORS and environment variable synchronization across two distinct hosting providers.
+
+---
+
+## ADR-010: Backend Structure, Pydantic Settings, and Health Endpoint Scope
+
+- **Status:** Implemented (Phase 1)
+- **Context:** The backend foundation requires a clean, testable entry point, modular settings management, CORS security, and a health endpoint prior to building RAG pipelines.
+- **Decision:**
+  - Use an application factory (`create_app()`) in `backend/app/main.py`.
+  - Encapsulate configuration in `backend/app/config.py` using `pydantic-settings` (`BaseSettings`), supporting both comma-separated strings and JSON arrays for origins with a cached `get_settings()` singleton.
+  - Reject wildcard (`*`) CORS origins when `environment == "production"`.
+  - Scope `GET /health` to verifying that the FastAPI web service itself is operational (`{"status": "ok", "environment": ..., "version": ...}`). Do not report downstream components (databases, vector stores, model APIs) as healthy before they are implemented and probed.
+- **Rationale:**
+  - Application factory prevents import side-effects and enables parameterized testing via `TestClient`.
+  - Explicit CORS configuration protects against unrestricted cross-origin access in deployed environments while easing local Vite development (`localhost:5173`).
+  - Truthful health reporting maintains observability integrity and avoids misleading monitoring checks.
+- **Alternatives Considered:**
+  - *Monolithic single-file app:* Fast for prototyping, but mixes route handlers, config, and middleware, making test isolation harder.
+  - *Reporting databases/models as healthy:* Misleading since those components do not yet exist.
+- **Trade-offs:** Introduces separate modules (`config.py`, `main.py`, `health.py`), requiring import resolution when running uvicorn from different working directories.
