@@ -29,7 +29,8 @@ To maintain engineering transparency, the table below delineates current project
 |---|---|---|
 | **Project Foundation & Architecture (Phase 0)** | **Implemented** | Repository directory structure, configuration templates (`.env.example`), `.gitignore`, Architectural Decision Records ([docs/decisions.md](docs/decisions.md)), and full system architecture specification ([docs/architecture.md](docs/architecture.md)). |
 | **Backend Foundation — FastAPI (Phase 1)** | **Implemented** | Application entry point and factory (`create_app`), Pydantic Settings configuration (`backend/app/config.py`), operational health endpoint (`GET /health`), CORS middleware allowlist, and pytest test suite. |
-| **Document Ingestion Pipeline** | *Planned (Phase 2)* | PDF/text extraction, cleaning, fixed and semantic chunking, embedding generation, Chroma indexing. |
+| **Document Loading Service (Phase 2a)** | **Implemented** | Reusable Python service (`backend/app/document_loader.py`) for extracting text and metadata from .txt and .pdf files with typed results, error handling, and file-size validation. |
+| **Document Ingestion Pipeline** | *Planned (Phase 2b)* | Text cleaning, fixed and semantic chunking, embedding generation, Chroma indexing. |
 | **Retrieval Strategies (A–D)** | *Planned (Phase 3)* | Basic vector search, semantic chunking retrieval, hybrid BM25 + vector search, and cross-encoder reranking. |
 | **LLM Generation Pipeline** | *Planned (Phase 3)* | Prompt construction with context grounding, integration with NVIDIA-hosted Nemotron API. |
 | **Evaluation Engine & Metrics** | *Planned (Phase 4)* | Deterministic retrieval metrics (Hit Rate, Recall@k, MRR), RAGAS answer quality metrics, and latency profiling. |
@@ -37,7 +38,7 @@ To maintain engineering transparency, the table below delineates current project
 | **CI/CD & Deployment** | *Planned (Phase 6)* | GitHub Actions automated test suites, regression gates, and cloud deployment pipelines. |
 
 > [!NOTE]
-> *Current Phase Status:* Phase 0 and Phase 1 are implemented. The FastAPI web service foundation and test suite are operational. Document ingestion, RAG retrieval pipelines, and model APIs are planned for upcoming phases.
+> *Current Phase Status:* Phase 0, Phase 1, and Phase 2a (Document Loading Service) are implemented. The FastAPI web service foundation, document loader service, and test suite are operational. Text cleaning, chunking, embeddings, RAG retrieval pipelines, and model APIs are planned for upcoming phases.
 
 ---
 
@@ -225,7 +226,7 @@ For detailed architectural component breakdowns and lifecycle flow documentation
 
 ---
 
-## 7. Results and Evaluation Benchmark Table
+## 8. Results and Evaluation Benchmark Table
 
 > [!IMPORTANT]
 > All benchmarks in this table are pending implementation and empirical execution. No metrics, latencies, or scores are fabricated.
@@ -239,7 +240,7 @@ For detailed architectural component breakdowns and lifecycle flow documentation
 
 ---
 
-## 8. Technical Decisions
+## 9. Technical Decisions
 
 All architectural trade-offs, technology choices, and provisional decisions are documented in formal Architectural Decision Records (ADRs):
 
@@ -253,21 +254,22 @@ All architectural trade-offs, technology choices, and provisional decisions are 
 - **[ADR-008](docs/decisions.md#adr-008-experiment-history-persistence--optional-postgresql):** Experiment History Persistence — Optional PostgreSQL
 - **[ADR-009](docs/decisions.md#adr-009-deployment-targets--vercel-frontend-and-renderrailway-backend):** Deployment Targets — Vercel (Frontend) and Render/Railway (Backend)
 - **[ADR-010](docs/decisions.md#adr-010-backend-structure-pydantic-settings-and-health-endpoint-scope):** Backend Structure, Pydantic Settings, and Health Endpoint Scope
+- **[ADR-011](docs/decisions.md#adr-011-document-loading-service--internal-python-service-for-textpdf-extraction):** Document Loading Service — Internal Python Service for Text/PDF Extraction
 
 Full ADR descriptions, rationale, and alternatives considered are maintained in [docs/decisions.md](docs/decisions.md).
 
 ---
 
-## 9. Testing and CI Strategy
+## 10. Testing and CI Strategy
 
-- **Unit Testing (Backend):** Pytest test suites covering configuration validation, CORS allowlist logic, and route status codes (implemented in Phase 1). Subsequent phases will add document parsing, chunking boundary logic, and metric calculations (Hit Rate, Recall@k, MRR).
+- **Unit Testing (Backend):** Pytest test suites covering configuration validation, CORS allowlist logic, route status codes, and document loading (implemented in Phase 1 and Phase 2a). Subsequent phases will add chunking boundary logic and metric calculations (Hit Rate, Recall@k, MRR).
 - **Unit & Component Testing (Frontend):** Vitest and React Testing Library verifying parameter inputs, chart renders, and API mock handling (planned for Phase 5).
 - **Integration Testing:** End-to-end evaluation flow validation with mock embeddings and mock LLM responses to ensure test determinism.
 - **Continuous Integration (GitHub Actions):** Automated linting (Ruff / ESLint), type checking (Mypy / TypeScript), test execution, and evaluation regression threshold gates.
 
 ---
 
-## 10. Setup and Usage
+## 11. Setup and Usage
 
 ### Prerequisites
 - Python 3.11+ (Windows `py` launcher or `python`)
@@ -328,7 +330,62 @@ uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 
 ---
 
-## 11. Limitations and Future Work
+## 12. Document Loading Service (Phase 2a)
+
+The document loading service is a reusable Python service (not a public HTTP endpoint) that extracts text and metadata from document files. It is designed to be used internally by other backend components during the document ingestion pipeline.
+
+### Supported File Formats
+
+- **.txt**: Plain text files with explicit encoding handling (UTF-8 with fallback to latin-1)
+- **.pdf**: PDF documents with page-by-page text extraction using the `pypdf` library
+
+### Key Features
+
+- **Typed Results**: Returns a structured `DocumentLoadResult` containing:
+  - Extracted text content
+  - Source filename
+  - File type (txt or pdf)
+  - Page count (for PDFs)
+  - File size in bytes
+
+- **Error Handling**: Clear, predictable errors for:
+  - Missing files (`FileNotFoundError`)
+  - Unsupported file extensions (`UnsupportedFileTypeError`)
+  - Corrupted or unreadable PDFs (`CorruptFileError`)
+  - Empty files or files with no extractable text (`EmptyFileError`)
+  - Files exceeding maximum size (`FileSizeExceededError`)
+
+- **File Size Safety**: Configurable maximum file size (default: 10 MB via `MAX_FILE_SIZE_BYTES` in `.env`)
+
+- **Case-Insensitive Extensions**: Handles `.TXT`, `.Pdf`, `.PDF`, etc.
+
+### Usage Example
+
+```python
+from backend.app.document_loader import DocumentLoader
+
+# Initialize loader (uses config max_file_size_bytes by default)
+loader = DocumentLoader()
+
+# Load a document
+result = loader.load("path/to/document.pdf")
+
+print(result.text)           # Extracted text
+print(result.page_count)     # Number of pages (None for txt)
+print(result.file_type)      # FileType.PDF or FileType.TXT
+print(result.file_size_bytes) # Size in bytes
+```
+
+### Limitations
+
+- The loader is an internal Python service, not a public HTTP upload endpoint
+- PDFs with only images (no text layers) will return empty text
+- Encrypted or password-protected PDFs are not supported
+- No chunking, embeddings, or vector indexing is performed at this stage (planned for Phase 2b)
+
+---
+
+## 13. Limitations and Future Work
 
 - **Local Embedding Latency:** Initial implementation will default to CPU-friendly sentence transformers; GPU acceleration or optimized ONNX runtimes are planned for high-throughput batch evaluation.
 - **Multi-Hop Reasoning:** Current evaluation metrics focus on single-hop retrieval; complex multi-hop multi-document synthesis will be addressed in future iterations.

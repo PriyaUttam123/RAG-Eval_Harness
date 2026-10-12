@@ -162,3 +162,32 @@ This document tracks the foundational architectural decisions for the **RAG Eval
   - *Monolithic single-file app:* Fast for prototyping, but mixes route handlers, config, and middleware, making test isolation harder.
   - *Reporting databases/models as healthy:* Misleading since those components do not yet exist.
 - **Trade-offs:** Introduces separate modules (`config.py`, `main.py`, `health.py`), requiring import resolution when running uvicorn from different working directories.
+
+---
+
+## ADR-011: Document Loading Service — Internal Python Service for Text/PDF Extraction
+
+- **Status:** Implemented (Phase 2a)
+- **Context:** The document ingestion pipeline requires a reusable service to extract text and metadata from uploaded document files before chunking and embedding. This service needs to handle multiple file formats, provide structured results, and validate file safety constraints.
+- **Decision:** Implement an internal Python service (`backend/app/document_loader.py`) that extracts text and metadata from .txt and .pdf files. The service is designed as a reusable Python class (not a public HTTP endpoint) to be called by other backend components.
+- **Rationale:**
+  - **Separation of Concerns:** Isolating document loading logic into a dedicated service makes it testable, reusable, and maintainable independent of HTTP layer concerns.
+  - **Typed Results:** Using Pydantic models (`DocumentLoadResult`) ensures type safety and clear metadata structure (text, filename, file type, page count, file size).
+  - **Error Handling:** Custom exception hierarchy (`FileNotFoundError`, `UnsupportedFileTypeError`, `FileSizeExceededError`, `EmptyFileError`, `CorruptFileError`) provides predictable, actionable error messages for upstream components.
+  - **File Size Safety:** Configurable maximum file size (default 10 MB via `MAX_FILE_SIZE_BYTES` in settings) prevents memory exhaustion and denial-of-service risks.
+  - **Encoding Strategy:** TXT files use UTF-8 with fallback to latin-1, handling most common text encodings without requiring user configuration.
+  - **PDF Extraction:** Uses `pypdf` library for page-by-page text extraction, returning page count metadata for downstream chunking decisions.
+- **Alternatives Considered:**
+  - *Public HTTP Upload Endpoint:* Would require authentication, path traversal protection, and multipart form handling. Over-engineered for an internal service that will be called by trusted backend code.
+  - *LangChain Document Loaders:* LangChain provides document loaders, but adds an unnecessary dependency for simple text/PDF extraction and introduces abstraction layers that complicate error handling.
+  - *Direct File Reading in Route Handlers:* Would duplicate loading logic across multiple endpoints and make testing difficult.
+- **Trade-offs:**
+  - The service is not a public API endpoint, so it cannot be called directly from the frontend. A future HTTP wrapper endpoint will be needed for document uploads.
+  - PDFs with only images (scanned documents) return empty text; OCR is not included in this phase (planned for future enhancement if needed).
+  - Encrypted or password-protected PDFs are not supported; they raise `CorruptFileError`.
+- **Implementation Details:**
+  - Supported formats: .txt (UTF-8/latin-1), .pdf (pypdf)
+  - Case-insensitive file extension handling
+  - File size validation before parsing
+  - Page count extraction for PDFs
+  - Comprehensive test coverage with temporary files and generated PDF fixtures

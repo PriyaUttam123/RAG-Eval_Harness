@@ -47,6 +47,10 @@ class Settings(BaseSettings):
         default=["http://localhost:5173", "http://127.0.0.1:5173"],
         description="Allowed CORS origins list",
     )
+    max_file_size_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        description="Maximum allowed document file size in bytes (default: 10 MB)",
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod
