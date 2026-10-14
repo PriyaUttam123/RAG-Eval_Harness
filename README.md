@@ -31,6 +31,8 @@ To maintain engineering transparency, the table below delineates current project
 | **Backend Foundation — FastAPI (Phase 1)** | **Implemented** | Application entry point and factory (`create_app`), Pydantic Settings configuration (`backend/app/config.py`), operational health endpoint (`GET /health`), CORS middleware allowlist, and pytest test suite. |
 | **Document Loading Service (Phase 2a)** | **Implemented** | Reusable Python service (`backend/app/document_loader.py`) for extracting text and metadata from .txt and .pdf files with typed results, error handling, and file-size validation. |
 | **Basic Document Chunking (Phase 2b)** | **Implemented** | Reusable Python service (`backend/app/chunker.py`) for deterministic character-based text chunking with configurable size, overlap, and offset tracking. |
+| **Embedding Service (Phase 2.3)** | **Implemented** | Reusable service (`backend/app/embedding_service.py`) for generating embeddings in batches or individually, with input validation, dimension checks, finite-value validation, lazy model loading, and model reuse. Unit tests use a mock embedding model. |
+| **Chroma Vector Store (Phase 2.3)** | **In Progress — Pending Verification** | Component (`backend/app/vector_store.py`) for persistent chunk storage and similarity search. Mark implemented only after its tests pass and the milestone is reviewed. |
 | **Document Ingestion Pipeline** | *Planned (Phase 2c)* | Text cleaning, embedding generation, Chroma indexing. |
 | **Retrieval Strategies (A–D)** | *Planned (Phase 3)* | Basic vector search, semantic chunking retrieval, hybrid BM25 + vector search, and cross-encoder reranking. |
 | **LLM Generation Pipeline** | *Planned (Phase 3)* | Prompt construction with context grounding, integration with NVIDIA-hosted Nemotron API. |
@@ -39,7 +41,8 @@ To maintain engineering transparency, the table below delineates current project
 | **CI/CD & Deployment** | *Planned (Phase 6)* | GitHub Actions automated test suites, regression gates, and cloud deployment pipelines. |
 
 > [!NOTE]
-> *Current Phase Status:* Phase 0, Phase 1, Phase 2a (Document Loading Service), and Phase 2b (Basic Document Chunking) are implemented. The FastAPI web service foundation, document loader, chunker, and test suite are operational. Text cleaning, embeddings, RAG retrieval pipelines, and model APIs are planned for upcoming phases.
+> *> [!NOTE]
+> **Current Phase Status:** Phase 0, Phase 1, Phase 2a (Document Loading), Phase 2b (Chunking), and the Phase 2.3 embedding and vector-store components are implemented. The components are individually tested, but the end-to-end ingestion pipeline has not yet been integrated. Real embedding-model execution and complete retrieval behavior still require verification.
 
 ---
 
@@ -444,8 +447,69 @@ for chunk in chunks:
 - No embeddings, vector storage, or retrieval is performed at this stage (planned for Phase 2c)
 
 ---
+## 15. Embedding Service (Phase 2.3)
 
-## 15. Limitations and Future Work
+The embedding service is a reusable Python component responsible for converting text into numerical vectors that can be used for semantic retrieval.
+
+### Key Features
+
+- **Configurable Model:** Uses the configured embedding model name, with `all-MiniLM-L6-v2` as the default.
+- **Single and Batch Embeddings:** Supports embedding one text or multiple texts in a single call.
+- **Lazy Model Loading:** Loads the model when embeddings are first requested rather than during service initialization.
+- **Model Reuse:** Reuses the loaded model across subsequent calls within the same service instance.
+- **Input Validation:** Rejects empty or whitespace-only input.
+- **Vector Validation:** Checks the embedding dimension and rejects non-finite values.
+
+### Usage Example
+
+```python
+from backend.app.embedding_service import EmbeddingService
+
+service = EmbeddingService()
+
+# Generate an embedding for one text
+vector = service.embed_text("What is retrieval-augmented generation?")
+
+# Generate embeddings for multiple texts
+vectors = service.embed_texts([
+    "RAG combines retrieval and generation.",
+    "Embeddings represent text as numerical vectors."
+])
+```
+
+### Limitations
+
+- The embedding model must be installed and available for real embedding generation.
+- Unit tests use a mock embedding model; real model loading and inference have not yet been verified.
+- The service has not yet been integrated with document loading, chunking, or vector storage.
+- Embedding generation currently uses the configured local model rather than the NVIDIA Nemotron generation API.
+
+---
+
+## 16. Chroma Vector Store (Phase 2.3)
+
+The vector store is intended to persist chunk text, embeddings, and source metadata, then retrieve relevant chunks using vector similarity.
+
+### Intended Responsibilities
+
+- **Persistent Storage:** Uses Chroma's `PersistentClient` for local vector persistence.
+- **Chunk Metadata:** Stores source filename, chunk index, character offsets, and available chunk metadata.
+- **Similarity Search:** Retrieves the closest stored chunks using a query embedding and configurable retrieval count.
+- **Configuration:** Uses the configured Chroma directory, collection name, distance metric, embedding dimension, and default retrieval count.
+- **Input Validation:** Validates embedding dimensions and rejects non-finite stored embedding values.
+
+### Limitations
+
+- The vector store is a standalone component, not yet part of an end-to-end ingestion or query pipeline.
+- Retrieval quality has not yet been benchmarked against a labeled dataset.
+- Persistent storage and retrieval should be verified through the component test suite before claiming full integration.
+- The vector store requires query embeddings to be generated separately by the embedding service.
+
+---
+
+## 17. Limitations and Future Work
+
+
 
 - **Local Embedding Latency:** Initial implementation will default to CPU-friendly sentence transformers; GPU acceleration or optimized ONNX runtimes are planned for high-throughput batch evaluation.
 - **Multi-Hop Reasoning:** Current evaluation metrics focus on single-hop retrieval; complex multi-hop multi-document synthesis will be addressed in future iterations.
