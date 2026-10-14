@@ -61,6 +61,45 @@ class Settings(BaseSettings):
         description="Default chunk overlap in characters for document chunking",
         ge=0,
     )
+    embedding_model_name: str = Field(
+    default="all-MiniLM-L6-v2",
+    description="Default embedding model identifier for chunk vectorization",
+    min_length=1,
+)
+    embedding_dimension: int = Field(
+        default=384,
+        description="Expected dimensionality of embedding vectors",
+        gt=0,
+    )
+    chroma_persist_dir: str = Field(
+        default="./data/chroma",
+        description="Filesystem directory for Chroma local vector persistence",
+    )
+    chroma_collection_name: str = Field(
+    default="rag_eval_chunks",
+    description="Chroma collection name for document chunks",
+    min_length=1,
+)
+    chroma_distance_metric: str = Field(
+        default="cosine",
+        description="Distance metric for vector search space ('cosine', 'l2', or 'ip')",
+    )
+    default_retrieval_k: int = Field(
+        default=4,
+        description="Default number of top similar chunks to retrieve",
+        gt=0,
+    )
+
+    @field_validator("chroma_distance_metric")
+    @classmethod
+    def validate_distance_metric(cls, metric: str) -> str:
+        """Ensure Chroma distance metric is a valid HNSW space."""
+        valid_metrics = {"cosine", "l2", "ip"}
+        if metric.lower() not in valid_metrics:
+            raise ValueError(
+                f"Invalid chroma_distance_metric '{metric}'. Must be one of {valid_metrics}"
+            )
+        return metric.lower()
 
     @field_validator("default_chunk_overlap")
     @classmethod

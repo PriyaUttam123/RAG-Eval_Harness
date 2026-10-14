@@ -66,6 +66,7 @@ pnpm-debug.log*
 
 # Vector Store, local databases & ingested data caches
 data/chroma/
+.chroma/
 data/uploads/*
 !data/uploads/.gitkeep
 data/eval_results/*

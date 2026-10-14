@@ -47,3 +47,58 @@ def test_chunking_settings_overlap_validation() -> None:
 
     with pytest.raises(ValueError, match="must be less than default_chunk_size"):
         Settings(default_chunk_size=100, default_chunk_overlap=150)
+
+def test_embedding_and_retrieval_settings_defaults() -> None:
+    """Verify default embedding and vector retrieval configuration."""
+    settings = Settings()
+    assert settings.embedding_model_name == "all-MiniLM-L6-v2"
+    assert settings.embedding_dimension == 384
+    assert settings.chroma_persist_dir == "./data/chroma"
+    assert settings.chroma_collection_name == "rag_eval_chunks"
+    assert settings.chroma_distance_metric == "cosine"
+    assert settings.default_retrieval_k == 4
+
+
+@pytest.mark.parametrize("metric", ["cosine", "l2", "ip"])
+def test_valid_chroma_distance_metrics(metric: str) -> None:
+    """Accept all supported Chroma distance metrics."""
+    settings = Settings(chroma_distance_metric=metric)
+    assert settings.chroma_distance_metric == metric
+
+
+def test_chroma_distance_metric_normalized_to_lowercase() -> None:
+    """Normalize uppercase metric names."""
+    settings = Settings(chroma_distance_metric="COSINE")
+    assert settings.chroma_distance_metric == "cosine"
+
+
+def test_invalid_chroma_distance_metric_rejected() -> None:
+    """Reject unsupported distance metrics."""
+    with pytest.raises(ValueError, match="Invalid chroma_distance_metric"):
+        Settings(chroma_distance_metric="euclidean")
+
+
+def test_empty_embedding_model_name_rejected() -> None:
+    """Reject an empty embedding model name."""
+    with pytest.raises(ValueError):
+        Settings(embedding_model_name="")
+
+
+def test_empty_chroma_collection_name_rejected() -> None:
+    """Reject an empty Chroma collection name."""
+    with pytest.raises(ValueError):
+        Settings(chroma_collection_name="")
+
+
+@pytest.mark.parametrize("dimension", [0, -1])
+def test_invalid_embedding_dimension_rejected(dimension: int) -> None:
+    """Require a positive embedding dimension."""
+    with pytest.raises(ValueError):
+        Settings(embedding_dimension=dimension)
+
+
+@pytest.mark.parametrize("k", [0, -1])
+def test_invalid_retrieval_k_rejected(k: int) -> None:
+    """Require a positive number of retrieved chunks."""
+    with pytest.raises(ValueError):
+        Settings(default_retrieval_k=k)
