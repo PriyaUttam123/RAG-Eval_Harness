@@ -31,3 +31,19 @@ def test_cors_production_wildcard_rejected() -> None:
     """Verify that wildcard origin is rejected when environment is set to production."""
     with pytest.raises(ValueError, match="Wildcard"):
         Settings(environment="production", cors_origins="*")
+
+
+def test_chunking_settings_defaults() -> None:
+    """Verify default chunk size and overlap values."""
+    settings = Settings()
+    assert settings.default_chunk_size == 512
+    assert settings.default_chunk_overlap == 50
+
+
+def test_chunking_settings_overlap_validation() -> None:
+    """Verify that default_chunk_overlap >= default_chunk_size is rejected."""
+    with pytest.raises(ValueError, match="must be less than default_chunk_size"):
+        Settings(default_chunk_size=100, default_chunk_overlap=100)
+
+    with pytest.raises(ValueError, match="must be less than default_chunk_size"):
+        Settings(default_chunk_size=100, default_chunk_overlap=150)

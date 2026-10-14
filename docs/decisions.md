@@ -191,3 +191,33 @@ This document tracks the foundational architectural decisions for the **RAG Eval
   - File size validation before parsing
   - Page count extraction for PDFs
   - Comprehensive test coverage with temporary files and generated PDF fixtures
+
+---
+
+## ADR-012: Document Chunking Service — Deterministic Character-Based Splitting with Offset Tracking
+
+- **Status:** Implemented (Phase 2b)
+- **Context:** Following the implementation of document loading in Phase 2a, the ingestion pipeline requires a deterministic, reusable service to divide extracted text into smaller, manageable chunks suitable for downstream embedding and vector search. Chunks must be traceable to their source document and preserve character-level positioning.
+- **Decision:** Implement an internal Python service (`backend/app/chunker.py`) with a `DocumentChunker` class and `Chunk` Pydantic model:
+  - Input: Accepts `DocumentLoadResult` from `backend.app.document_loader` directly.
+  - Splitting algorithm: Deterministic character-based sliding window with a fixed stride (`stride = chunk_size - chunk_overlap`).
+  - Offsets: Follow standard Python slice convention (start-inclusive, end-exclusive) such that `document.text[chunk.start_offset:chunk.end_offset] == chunk.text`.
+  - Provenance: Each chunk records its zero-based sequential `chunk_index`, `source_filename`, `start_offset`, `end_offset`, and a `metadata` dictionary preserving document attributes (`file_type`, `page_count`, `file_size_bytes`).
+  - Configuration: Default `chunk_size = 512` characters and `chunk_overlap = 50` characters, configured via `backend/app/config.py` (`default_chunk_size`, `default_chunk_overlap`) and overridable per instance.
+  - Parameter validation: Strictly validates `chunk_size > 0`, `chunk_overlap >= 0`, `chunk_overlap < chunk_size`, and integer types; rejects invalid inputs and empty/whitespace documents via explicit exception hierarchy (`InvalidChunkingParametersError`, `EmptyTextError`).
+- **Rationale:**
+  - **Determinism:** Character-based chunking guarantees identical output for identical input text, crucial for reproducible evaluation harness benchmarks.
+  - **Traceability:** Explicit offset tracking allows downstream retrieval and evaluation components to highlight or cite exact source text segments.
+  - **Separation of Concerns:** Chunking is decoupled from file loading, HTTP endpoints, embeddings, and vector storage, keeping testing and maintenance focused.
+  - **Safety & Progress Guarantee:** Stride is guaranteed positive (`stride >= 1`), preventing infinite loops during splitting. Empty chunks are actively avoided.
+- **Alternatives Considered:**
+  - *Recursive Character / Sentence Splitter:* Splits on paragraph and sentence delimiters (`\n\n`, `\n`, `. `). While better for human readability, it produces variable chunk lengths and can complicate offset tracking. Character chunking provides the foundational baseline against which advanced chunkers can be benchmarked.
+  - *Semantic Breakpoint Chunking:* Dynamically partitions text based on embedding distance differences. This is explicitly planned as Strategy B in Phase 3.
+  - *Public HTTP Chunking Endpoint:* Exposing chunking as an endpoint adds unnecessary network overhead and validation complexity for an internal pipeline step.
+- **Trade-offs:**
+  - Character-based chunking may split words or sentences in the middle.
+  - Semantic coherence across boundaries relies strictly on character overlap.
+- **Implementation Details:**
+  - Module location: `backend/app/chunker.py`
+  - Defaults: `chunk_size=512`, `chunk_overlap=50`, configurable via environment variables `DEFAULT_CHUNK_SIZE` and `DEFAULT_CHUNK_OVERLAP`
+  - Automated tests: `tests/test_chunker.py` covering short text, long text, overlap verification, monotonicity, offset indexing, whitespace handling, determinism, and integration with `DocumentLoader`.

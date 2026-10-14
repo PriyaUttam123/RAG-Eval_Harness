@@ -51,6 +51,27 @@ class Settings(BaseSettings):
         default=10 * 1024 * 1024,
         description="Maximum allowed document file size in bytes (default: 10 MB)",
     )
+    default_chunk_size: int = Field(
+        default=512,
+        description="Default chunk size in characters for document chunking",
+        gt=0,
+    )
+    default_chunk_overlap: int = Field(
+        default=50,
+        description="Default chunk overlap in characters for document chunking",
+        ge=0,
+    )
+
+    @field_validator("default_chunk_overlap")
+    @classmethod
+    def validate_chunk_overlap(cls, overlap: int, info: ValidationInfo) -> int:
+        """Validate that default_chunk_overlap is strictly less than default_chunk_size."""
+        size = info.data.get("default_chunk_size", 512)
+        if overlap >= size:
+            raise ValueError(
+                f"default_chunk_overlap ({overlap}) must be less than default_chunk_size ({size})."
+            )
+        return overlap
 
     @field_validator("cors_origins", mode="before")
     @classmethod

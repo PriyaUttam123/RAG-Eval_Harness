@@ -30,7 +30,8 @@ To maintain engineering transparency, the table below delineates current project
 | **Project Foundation & Architecture (Phase 0)** | **Implemented** | Repository directory structure, configuration templates (`.env.example`), `.gitignore`, Architectural Decision Records ([docs/decisions.md](docs/decisions.md)), and full system architecture specification ([docs/architecture.md](docs/architecture.md)). |
 | **Backend Foundation — FastAPI (Phase 1)** | **Implemented** | Application entry point and factory (`create_app`), Pydantic Settings configuration (`backend/app/config.py`), operational health endpoint (`GET /health`), CORS middleware allowlist, and pytest test suite. |
 | **Document Loading Service (Phase 2a)** | **Implemented** | Reusable Python service (`backend/app/document_loader.py`) for extracting text and metadata from .txt and .pdf files with typed results, error handling, and file-size validation. |
-| **Document Ingestion Pipeline** | *Planned (Phase 2b)* | Text cleaning, fixed and semantic chunking, embedding generation, Chroma indexing. |
+| **Basic Document Chunking (Phase 2b)** | **Implemented** | Reusable Python service (`backend/app/chunker.py`) for deterministic character-based text chunking with configurable size, overlap, and offset tracking. |
+| **Document Ingestion Pipeline** | *Planned (Phase 2c)* | Text cleaning, embedding generation, Chroma indexing. |
 | **Retrieval Strategies (A–D)** | *Planned (Phase 3)* | Basic vector search, semantic chunking retrieval, hybrid BM25 + vector search, and cross-encoder reranking. |
 | **LLM Generation Pipeline** | *Planned (Phase 3)* | Prompt construction with context grounding, integration with NVIDIA-hosted Nemotron API. |
 | **Evaluation Engine & Metrics** | *Planned (Phase 4)* | Deterministic retrieval metrics (Hit Rate, Recall@k, MRR), RAGAS answer quality metrics, and latency profiling. |
@@ -38,7 +39,7 @@ To maintain engineering transparency, the table below delineates current project
 | **CI/CD & Deployment** | *Planned (Phase 6)* | GitHub Actions automated test suites, regression gates, and cloud deployment pipelines. |
 
 > [!NOTE]
-> *Current Phase Status:* Phase 0, Phase 1, and Phase 2a (Document Loading Service) are implemented. The FastAPI web service foundation, document loader service, and test suite are operational. Text cleaning, chunking, embeddings, RAG retrieval pipelines, and model APIs are planned for upcoming phases.
+> *Current Phase Status:* Phase 0, Phase 1, Phase 2a (Document Loading Service), and Phase 2b (Basic Document Chunking) are implemented. The FastAPI web service foundation, document loader, chunker, and test suite are operational. Text cleaning, embeddings, RAG retrieval pipelines, and model APIs are planned for upcoming phases.
 
 ---
 
@@ -64,12 +65,12 @@ Unlike standard RAG demo chatbots that merely wrap an LLM call around vector sea
 - **Answer Generation:** NVIDIA-hosted Nemotron API (`nvidia/nemotron-4-340b-instruct`) via OpenAI-compatible REST endpoint
 - **Evaluation:** RAGAS (Faithfulness, Answer Relevance, Context Precision) + Custom Retrieval Metrics (Hit Rate, Recall@k, MRR)
 - **Testing:** Pytest (Backend) and Vitest / React Testing Library (Frontend)
-- **Persistence:** Chroma for chunks/vectors; optional PostgreSQL for experiment metadata and run history
+- **Persistence:** PostgreSQL for experiment metadata and run history
 - **CI / Deployment Targets:** GitHub Actions CI; Vercel (Frontend SPA) and Render / Railway (Backend container)
 
 ---
 
-## System Architecture
+## 7. System Architecture
 
 The end-to-end architecture is organized into modular subsystems covering ingestion, retrieval, generation, evaluation, storage, and quality delivery:
 
@@ -226,7 +227,7 @@ For detailed architectural component breakdowns and lifecycle flow documentation
 
 ---
 
-## 8. Results and Evaluation Benchmark Table
+## 9. Results and Evaluation Benchmark Table
 
 > [!IMPORTANT]
 > All benchmarks in this table are pending implementation and empirical execution. No metrics, latencies, or scores are fabricated.
@@ -240,7 +241,7 @@ For detailed architectural component breakdowns and lifecycle flow documentation
 
 ---
 
-## 9. Technical Decisions
+## 10. Technical Decisions
 
 All architectural trade-offs, technology choices, and provisional decisions are documented in formal Architectural Decision Records (ADRs):
 
@@ -255,21 +256,22 @@ All architectural trade-offs, technology choices, and provisional decisions are 
 - **[ADR-009](docs/decisions.md#adr-009-deployment-targets--vercel-frontend-and-renderrailway-backend):** Deployment Targets — Vercel (Frontend) and Render/Railway (Backend)
 - **[ADR-010](docs/decisions.md#adr-010-backend-structure-pydantic-settings-and-health-endpoint-scope):** Backend Structure, Pydantic Settings, and Health Endpoint Scope
 - **[ADR-011](docs/decisions.md#adr-011-document-loading-service--internal-python-service-for-textpdf-extraction):** Document Loading Service — Internal Python Service for Text/PDF Extraction
+- **[ADR-012](docs/decisions.md#adr-012-document-chunking-service--deterministic-character-based-splitting-with-offset-tracking):** Document Chunking Service — Deterministic Character-Based Splitting with Offset Tracking
 
 Full ADR descriptions, rationale, and alternatives considered are maintained in [docs/decisions.md](docs/decisions.md).
 
 ---
 
-## 10. Testing and CI Strategy
+## 11. Testing and CI Strategy
 
-- **Unit Testing (Backend):** Pytest test suites covering configuration validation, CORS allowlist logic, route status codes, and document loading (implemented in Phase 1 and Phase 2a). Subsequent phases will add chunking boundary logic and metric calculations (Hit Rate, Recall@k, MRR).
+- **Unit Testing (Backend):** Pytest test suites covering configuration validation, CORS allowlist logic, route status codes, document loading, and document chunking (implemented in Phase 1, Phase 2a, and Phase 2b). Subsequent phases will add vector indexing and metric calculations (Hit Rate, Recall@k, MRR).
 - **Unit & Component Testing (Frontend):** Vitest and React Testing Library verifying parameter inputs, chart renders, and API mock handling (planned for Phase 5).
 - **Integration Testing:** End-to-end evaluation flow validation with mock embeddings and mock LLM responses to ensure test determinism.
 - **Continuous Integration (GitHub Actions):** Automated linting (Ruff / ESLint), type checking (Mypy / TypeScript), test execution, and evaluation regression threshold gates.
 
 ---
 
-## 11. Setup and Usage
+## 12. Setup and Usage
 
 ### Prerequisites
 - Python 3.11+ (Windows `py` launcher or `python`)
@@ -325,12 +327,11 @@ uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
     "version": "0.1.0"
   }
   ```
-- **Interactive OpenAPI Documentation (Swagger UI):** `http://localhost:8000/docs`
 - **ReDoc Documentation:** `http://localhost:8000/redoc`
 
 ---
 
-## 12. Document Loading Service (Phase 2a)
+## 13. Document Loading Service (Phase 2a)
 
 The document loading service is a reusable Python service (not a public HTTP endpoint) that extracts text and metadata from document files. It is designed to be used internally by other backend components during the document ingestion pipeline.
 
@@ -381,11 +382,70 @@ print(result.file_size_bytes) # Size in bytes
 - The loader is an internal Python service, not a public HTTP upload endpoint
 - PDFs with only images (no text layers) will return empty text
 - Encrypted or password-protected PDFs are not supported
-- No chunking, embeddings, or vector indexing is performed at this stage (planned for Phase 2b)
+- No chunking, embeddings, or vector indexing is performed at this stage (handled by the chunker service)
 
 ---
 
-## 13. Limitations and Future Work
+## 14. Document Chunking Service (Phase 2b)
+
+The document chunking service is a reusable Python service (not a public HTTP endpoint) that splits document text into smaller, manageable segments with configurable size and overlap. It is designed to be used internally by other backend components during the document ingestion pipeline.
+
+### Key Features
+
+- **Deterministic Character-Based Splitting:** Splits text based on character count with fixed stride, ensuring reproducible results
+- **Configurable Parameters:**
+  - `chunk_size`: Maximum characters per chunk (default: 512, via `DEFAULT_CHUNK_SIZE` in settings)
+  - `chunk_overlap`: Number of overlapping characters between chunks (default: 50, via `DEFAULT_CHUNK_OVERLAP` in settings)
+- **Typed Results:** Returns a list of `Chunk` objects containing:
+  - Chunk index (zero-based, sequential)
+  - Source filename (inherited from document loader)
+  - Chunk text content
+  - Start offset in original text (inclusive)
+  - End offset in original text (exclusive)
+  - Provenance metadata (`file_type`, `page_count`, `file_size_bytes`)
+- **Parameter Validation:** Ensures `chunk_size > 0`, `chunk_overlap >= 0`, and `chunk_overlap < chunk_size` with explicit integer type enforcement
+- **Offset Convention:** Uses start-inclusive/end-exclusive convention (`text[start_offset:end_offset] == chunk.text`)
+- **Whitespace Handling:** Strips leading/trailing whitespace before chunking, preserving original document offsets and avoiding empty chunks
+
+### Usage Example
+
+```python
+from backend.app.document_loader import DocumentLoader
+from backend.app.chunker import DocumentChunker
+
+# Load a document
+loader = DocumentLoader()
+document = loader.load("path/to/document.pdf")
+
+# Chunk the document (defaults to 512 char size, 50 char overlap)
+chunker = DocumentChunker(chunk_size=512, chunk_overlap=50)
+chunks = chunker.chunk(document)
+
+# Access chunks
+for chunk in chunks:
+    print(f"Chunk {chunk.chunk_index}: {chunk.text[:50]}...")
+    print(f"  Offsets: {chunk.start_offset}-{chunk.end_offset}")
+    print(f"  Source: {chunk.source_filename}")
+    print(f"  Metadata: {chunk.metadata}")
+```
+
+### Design Decisions
+
+- **Character-Based Splitting:** Simple, deterministic, and language-agnostic. Does not attempt to split at word or sentence boundaries (semantic chunking is planned for future phases).
+- **Overlap for Context:** Overlapping chunks ensure that context is preserved across chunk boundaries, improving retrieval quality.
+- **Offset Tracking:** Character offsets enable tracing each chunk back to its exact position in the original document, useful for debugging and citation.
+- **Separation of Concerns:** Loading and chunking are separate services, allowing independent testing and configuration.
+
+### Limitations
+
+- The chunker is an internal Python service, not a public HTTP endpoint
+- Character-based splitting may split words or sentences mid-stream (semantic chunking is planned for future phases)
+- No text cleaning (HTML removal, normalization, etc.) is performed at this stage (planned for Phase 2c)
+- No embeddings, vector storage, or retrieval is performed at this stage (planned for Phase 2c)
+
+---
+
+## 15. Limitations and Future Work
 
 - **Local Embedding Latency:** Initial implementation will default to CPU-friendly sentence transformers; GPU acceleration or optimized ONNX runtimes are planned for high-throughput batch evaluation.
 - **Multi-Hop Reasoning:** Current evaluation metrics focus on single-hop retrieval; complex multi-hop multi-document synthesis will be addressed in future iterations.
