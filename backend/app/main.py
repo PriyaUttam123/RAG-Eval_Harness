@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 try:
     from backend.app.config import get_settings
     from backend.app.api.routes.health import router as health_router
+    from backend.app.api.routes.ingestion import router as ingestion_router
 except ImportError:
     from app.config import get_settings
     from app.api.routes.health import router as health_router
+    from app.api.routes.ingestion import router as ingestion_router
 
 
 def create_app() -> FastAPI:
@@ -35,6 +37,7 @@ def create_app() -> FastAPI:
 
     # Register API routers
     app.include_router(health_router)
+    app.include_router(ingestion_router)
 
     return app
 
