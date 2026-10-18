@@ -6,6 +6,7 @@ safe fallback defaults for local development.
 
 from functools import lru_cache
 from typing import List, Union
+
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -62,10 +63,10 @@ class Settings(BaseSettings):
         ge=0,
     )
     embedding_model_name: str = Field(
-    default="all-MiniLM-L6-v2",
-    description="Default embedding model identifier for chunk vectorization",
-    min_length=1,
-)
+        default="all-MiniLM-L6-v2",
+        description="Default embedding model identifier for chunk vectorization",
+        min_length=1,
+    )
     embedding_dimension: int = Field(
         default=384,
         description="Expected dimensionality of embedding vectors",
@@ -76,10 +77,10 @@ class Settings(BaseSettings):
         description="Filesystem directory for Chroma local vector persistence",
     )
     chroma_collection_name: str = Field(
-    default="rag_eval_chunks",
-    description="Chroma collection name for document chunks",
-    min_length=1,
-)
+        default="rag_eval_chunks",
+        description="Chroma collection name for document chunks",
+        min_length=1,
+    )
     chroma_distance_metric: str = Field(
         default="cosine",
         description="Distance metric for vector search space ('cosine', 'l2', or 'ip')",
@@ -87,6 +88,30 @@ class Settings(BaseSettings):
     default_retrieval_k: int = Field(
         default=4,
         description="Default number of top similar chunks to retrieve",
+        gt=0,
+    )
+
+    # Generation / NVIDIA API configuration
+    nvidia_api_key: str = Field(
+        default="",
+        description="NVIDIA API key for hosted generation",
+    )
+    nvidia_base_url: str = Field(
+        default="https://integrate.api.nvidia.com/v1",
+        description="OpenAI-compatible NVIDIA API base URL",
+    )
+    nvidia_model_name: str = Field(
+        default="",
+        description="NVIDIA-hosted generation model identifier",
+    )
+    generation_temperature: float = Field(
+        default=0.0,
+        description="Generation temperature",
+        ge=0.0,
+    )
+    generation_max_tokens: int = Field(
+        default=512,
+        description="Maximum number of tokens generated per response",
         gt=0,
     )
 
@@ -120,17 +145,24 @@ class Settings(BaseSettings):
             value = value.strip()
             if value.startswith("[") and value.endswith("]"):
                 import json
+
                 return json.loads(value)
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
     @field_validator("cors_origins")
     @classmethod
-    def validate_cors_for_production(cls, origins: list[str], info: ValidationInfo) -> list[str]:
+    def validate_cors_for_production(
+        cls,
+        origins: list[str],
+        info: ValidationInfo,
+    ) -> list[str]:
         """Prevent unrestricted wildcard origins in production environments."""
         env = info.data.get("environment", "development")
         if env == "production" and "*" in origins:
-            raise ValueError("Wildcard '*' CORS origin is not permitted in production environment.")
+            raise ValueError(
+                "Wildcard '*' CORS origin is not permitted in production environment."
+            )
         return origins
 
 

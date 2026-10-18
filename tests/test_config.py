@@ -102,3 +102,38 @@ def test_invalid_retrieval_k_rejected(k: int) -> None:
     """Require a positive number of retrieved chunks."""
     with pytest.raises(ValueError):
         Settings(default_retrieval_k=k)
+
+def test_generation_settings_have_expected_defaults():
+    settings = Settings()
+
+    assert settings.nvidia_api_key == ""
+    assert settings.nvidia_base_url == "https://integrate.api.nvidia.com/v1"
+    assert settings.nvidia_model_name == ""
+    assert settings.generation_temperature == 0.0
+    assert settings.generation_max_tokens == 512
+
+
+def test_generation_temperature_rejects_negative_values():
+    with pytest.raises(ValueError):
+        Settings(generation_temperature=-0.1)
+
+
+def test_generation_max_tokens_rejects_non_positive_values():
+    with pytest.raises(ValueError):
+        Settings(generation_max_tokens=0)
+
+
+def test_generation_settings_can_be_overridden():
+    settings = Settings(
+        nvidia_api_key="test-key",
+        nvidia_base_url="https://example.com/v1",
+        nvidia_model_name="test-model",
+        generation_temperature=0.2,
+        generation_max_tokens=1024,
+    )
+
+    assert settings.nvidia_api_key == "test-key"
+    assert settings.nvidia_base_url == "https://example.com/v1"
+    assert settings.nvidia_model_name == "test-model"
+    assert settings.generation_temperature == 0.2
+    assert settings.generation_max_tokens == 1024
