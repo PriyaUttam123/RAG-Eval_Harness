@@ -1,3 +1,4 @@
+
 from math import isfinite
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -44,7 +45,6 @@ class VectorStore:
         metadatas: List[Dict[str, Any]] = []
         vectors: List[List[float]] = []
 
-       
         for chunk, embedding in zip(chunks, embeddings):
             if len(embedding) != self.settings.embedding_dimension:
                 raise ValueError(
@@ -59,6 +59,7 @@ class VectorStore:
             documents.append(chunk.text)
             vectors.append([float(value) for value in embedding])
 
+            # Required provenance fields cannot be overwritten by custom metadata.
             metadatas.append(
                 {
                     **chunk.metadata,
@@ -69,7 +70,6 @@ class VectorStore:
                 }
             )
 
-
         self.collection.add(
             ids=ids,
             documents=documents,
@@ -79,7 +79,6 @@ class VectorStore:
 
         return ids
 
-    
     def search(
         self,
         query_embedding: List[float],
@@ -92,12 +91,20 @@ class VectorStore:
                 f"got {len(query_embedding)}."
             )
 
+        if not all(isfinite(float(value)) for value in query_embedding):
+            raise ValueError("Query embedding values must be finite.")
+
+        if not all(isfinite(value) for value in query_embedding):
+            raise ValueError("Query embedding values must all be finite.")
+
         k = top_k if top_k is not None else self.settings.default_retrieval_k
+
         if k <= 0:
             raise ValueError("top_k must be positive.")
 
         count = self.collection.count()
 
+        # Chroma does not accept n_results=0.
         if count == 0:
             return {
                 "ids": [[]],
@@ -107,7 +114,9 @@ class VectorStore:
             }
 
         return self.collection.query(
-            query_embeddings=[query_embedding],
+            query_embeddings=[
+                [float(value) for value in query_embedding]
+            ],
             n_results=min(k, count),
             include=["documents", "metadatas", "distances"],
         )
