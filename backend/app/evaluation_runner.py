@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 try:
     from backend.app.evaluation_models import EvaluationCase, EvaluationDataset
@@ -22,6 +22,7 @@ class EvaluationResult(BaseModel):
     relevant_chunk_ids: List[str]
     case_type: str
     error: Optional[str] = None
+    retrieved_contexts: List[str] = Field(default_factory=list)
 
 
 class EvaluationRunResult(BaseModel):
@@ -77,9 +78,16 @@ class EvaluationRunner:
                 )
 
                 retrieved_ids = [
-                    source.chunk_id
+                    getattr(source, "chunk_id", "")
                     if hasattr(source, "chunk_id")
-                    else source.get("chunk_id", "")
+                    else (source.get("chunk_id", "") if isinstance(source, dict) else "")
+                    for source in rag_answer.sources
+                ]
+
+                retrieved_contexts = [
+                    getattr(source, "text", "")
+                    if hasattr(source, "text")
+                    else (source.get("text", "") if isinstance(source, dict) else "")
                     for source in rag_answer.sources
                 ]
 
@@ -92,6 +100,7 @@ class EvaluationRunner:
                         relevant_chunk_ids=list(case.relevant_chunk_ids),
                         case_type=case.case_type,
                         error=None,
+                        retrieved_contexts=retrieved_contexts,
                     )
                 )
                 successful_cases += 1
@@ -106,6 +115,7 @@ class EvaluationRunner:
                         relevant_chunk_ids=list(case.relevant_chunk_ids),
                         case_type=case.case_type,
                         error=error_msg,
+                        retrieved_contexts=[],
                     )
                 )
                 failed_cases += 1
