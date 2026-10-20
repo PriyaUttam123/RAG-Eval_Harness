@@ -221,3 +221,55 @@ This document tracks the foundational architectural decisions for the **RAG Eval
   - Module location: `backend/app/chunker.py`
   - Defaults: `chunk_size=512`, `chunk_overlap=50`, configurable via environment variables `DEFAULT_CHUNK_SIZE` and `DEFAULT_CHUNK_OVERLAP`
   - Automated tests: `tests/test_chunker.py` covering short text, long text, overlap verification, monotonicity, offset indexing, whitespace handling, determinism, and integration with `DocumentLoader`.
+## ADR-013: Reranking after candidate retrieval
+
+**Status:** Accepted
+
+**Context**
+
+The evaluation harness needs to support reranking as a retrieval-stage
+improvement without tightly coupling reranking to a specific retrieval
+implementation.
+
+**Decision**
+
+Use a two-stage retrieval pipeline:
+
+1. Retrieve a broader candidate set using vector or hybrid retrieval.
+2. Convert candidates to a common `RerankerCandidate` model.
+3. Apply an injectable reranker through `RerankingService`.
+4. Return the final top-k reranked results for downstream generation.
+
+The reranking layer is kept separate from retrieval so that different
+reranker implementations can be evaluated without rewriting the retrieval
+pipeline.
+
+The current implementation includes a deterministic lexical
+`SimpleReranker` baseline. A stronger model-based reranker can be introduced
+later behind the same interface.
+
+**Rationale**
+
+This design allows experiments to compare:
+
+- vector retrieval
+- hybrid retrieval
+- vector + reranking
+- hybrid + reranking
+
+without duplicating orchestration logic.
+
+The broader retrieval candidate pool also allows the reranker to recover
+relevant chunks that were not initially ranked near the top.
+
+**Trade-offs**
+
+The two-stage pipeline adds computation and latency compared with direct
+retrieval. The current lexical reranker is intentionally simple and is a
+baseline rather than a production-quality semantic reranker.
+
+**Consequences**
+
+Reranking is now an independently testable stage in the RAG evaluation
+harness. Future rerankers can implement the existing `Reranker` interface
+without changing the higher-level retrieval orchestration.
