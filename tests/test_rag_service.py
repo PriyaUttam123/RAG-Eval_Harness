@@ -1,7 +1,8 @@
 """Unit tests for RAGService orchestration layer."""
 
 from typing import Any, List, Optional
-
+from backend.app.hybrid_retrieval import HybridResult
+from backend.app.reranker import RerankedResult
 import pytest
 
 from backend.app.prompt_builder import PromptContext
@@ -287,3 +288,85 @@ def test_default_services_instantiation():
 
     assert isinstance(service.retrieval_service, RetrievalService)
     assert isinstance(service.generation_service, GenerationService)
+
+def test_hybrid_results_are_supported_by_rag_service():
+    """Verify HybridResult objects can flow through RAGService."""
+    hybrid_result = HybridResult(
+        chunk_id="hybrid-1",
+        text="Hybrid retrieval context.",
+        metadata={
+            "source_filename": "hybrid.pdf",
+            "chunk_index": 2,
+        },
+        score=0.75,
+        vector_rank=0,
+        bm25_rank=1,
+    )
+
+    retrieval = type(
+        "FakeHybridRetrievalService",
+        (),
+        {
+            "retrieve": lambda self, query, top_k=None: [hybrid_result],
+        },
+    )()
+
+    generation = FakeGenerationService(
+        answer="Answer from hybrid retrieval."
+    )
+
+    service = RAGService(
+        retrieval_service=retrieval,
+        generation_service=generation,
+    )
+
+    result = service.answer("What does hybrid retrieval find?", top_k=1)
+
+    assert result.answer == "Answer from hybrid retrieval."
+    assert len(result.sources) == 1
+    assert result.sources[0].chunk_id == "hybrid-1"
+    assert result.sources[0].text == "Hybrid retrieval context."
+    assert result.sources[0].source_filename == "hybrid.pdf"
+    assert result.sources[0].chunk_index == 2
+    assert result.sources[0].distance == pytest.approx(0.75)
+
+
+def test_reranked_results_are_supported_by_rag_service():
+    """Verify RerankedResult objects can flow through RAGService."""
+    reranked_result = RerankedResult(
+        chunk_id="reranked-1",
+        text="Reranked retrieval context.",
+        metadata={
+            "source_filename": "reranked.pdf",
+            "chunk_index": 5,
+        },
+        score=0.9,
+        original_rank=2,
+    )
+
+    retrieval = type(
+        "FakeRerankedRetrievalService",
+        (),
+        {
+            "retrieve": lambda self, query, top_k=None: [reranked_result],
+        },
+    )()
+
+    generation = FakeGenerationService(
+        answer="Answer from reranked retrieval."
+    )
+
+    service = RAGService(
+        retrieval_service=retrieval,
+        generation_service=generation,
+    )
+
+    result = service.answer("What does reranking find?", top_k=1)
+
+    assert result.answer == "Answer from reranked retrieval."
+    assert len(result.sources) == 1
+    assert result.sources[0].chunk_id == "reranked-1"
+    assert result.sources[0].text == "Reranked retrieval context."
+    assert result.sources[0].source_filename == "reranked.pdf"
+    assert result.sources[0].chunk_index == 5
+    assert result.sources[0].distance == pytest.approx(0.9)
