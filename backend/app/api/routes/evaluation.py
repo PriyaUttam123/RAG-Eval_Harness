@@ -1,10 +1,19 @@
+
 """Evaluation API route module."""
 
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+try:
+    from backend.app.evaluation_service import EvaluationService
+    from backend.app.experiment_comparison import ExperimentComparisonService
+    from backend.app.experiment_models import ExperimentResult
+except ImportError:
+    from app.evaluation_service import EvaluationService
+    from app.experiment_comparison import ExperimentComparisonService
+    from app.experiment_models import ExperimentResult
 try:
     from backend.app.evaluation_service import EvaluationService
 except ImportError:
@@ -39,6 +48,27 @@ def run_evaluation(request: EvaluationRunRequest):
             top_k=request.top_k,
         )
         return report.model_dump()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+class EvaluationComparisonRequest(BaseModel):
+    """Request payload for comparing executed experiment results."""
+
+    results: List[ExperimentResult] = Field(
+        ...,
+        description="Executed experiment results to compare.",
+    )
+
+
+@router.post("/compare")
+def compare_evaluations(request: EvaluationComparisonRequest):
+    """Compare multiple executed experiment results."""
+    try:
+        service = ExperimentComparisonService()
+        comparison = service.compare(request.results)
+        return comparison.model_dump()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:

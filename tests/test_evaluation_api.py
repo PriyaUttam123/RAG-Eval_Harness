@@ -236,3 +236,77 @@ def test_openapi_paths_include_evaluation_run():
     schema = response.json()
     assert "/evaluation/run" in schema["paths"]
     assert "post" in schema["paths"]["/evaluation/run"]
+
+def _make_experiment_result(
+    experiment_id: str = "exp-1",
+    name: str = "Vector baseline",
+) -> dict:
+    return {
+        "run_metadata": {
+            "experiment_id": experiment_id,
+            "config": {
+                "name": name,
+                "description": "",
+                "chunk_size": 500,
+                "chunk_overlap": 50,
+                "retrieval_top_k": 5,
+                "evaluation_k": 5,
+                "retrieval_strategy": "vector",
+                "reranking_enabled": False,
+                "embedding_model": "test-embedding",
+                "generation_model": "test-generation",
+            },
+            "dataset_name": "golden",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+        "report": _make_sample_report().model_dump(),
+        "duration_seconds": 1.5,
+        "error_count": 0,
+        "metadata": {},
+    }
+
+
+def test_compare_evaluations_success():
+    """Verify POST /evaluation/compare returns comparison data."""
+    response = client.post(
+        "/evaluation/compare",
+        json={
+            "results": [
+                _make_experiment_result("exp-1", "Vector baseline"),
+                _make_experiment_result("exp-2", "Hybrid retrieval"),
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["total_experiments"] == 2
+    assert len(data["rows"]) == 2
+    assert data["rows"][0]["experiment_id"] == "exp-1"
+    assert data["rows"][1]["experiment_id"] == "exp-2"
+
+
+def test_compare_evaluations_empty_results():
+    """Verify comparison accepts an empty result list."""
+    response = client.post(
+        "/evaluation/compare",
+        json={"results": []},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["total_experiments"] == 0
+    assert data["rows"] == []
+
+
+def test_openapi_paths_include_evaluation_compare():
+    """Verify /evaluation/compare is registered in FastAPI OpenAPI."""
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert "/evaluation/compare" in schema["paths"]
+    assert "post" in schema["paths"]["/evaluation/compare"]
