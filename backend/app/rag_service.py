@@ -1,17 +1,17 @@
 """RAG orchestration service coordinating retrieval and generation."""
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel
 
 try:
     from backend.app.generation_service import GenerationService
     from backend.app.prompt_builder import PromptContext
-    from backend.app.retrieval_service import RetrievalResult, RetrievalService, RetrievedChunk
+    from backend.app.retrieval_service import RetrievalService, RetrievedChunk
 except ImportError:
     from app.generation_service import GenerationService
     from app.prompt_builder import PromptContext
-    from app.retrieval_service import RetrievalResult, RetrievalService, RetrievedChunk
+    from app.retrieval_service import RetrievalService, RetrievedChunk
 
 
 class RAGSource(BaseModel):
@@ -37,15 +37,11 @@ class RAGService:
 
     def __init__(
         self,
-        retrieval_service: Optional[RetrievalService] = None,
+        retrieval_service: Optional[Any] = None,
         generation_service: Optional[GenerationService] = None,
     ) -> None:
-        """Initialize RAGService with optional dependencies.
+        """Initialize RAGService with optional dependencies."""
 
-        Args:
-            retrieval_service: Optional RetrievalService instance for chunk search.
-            generation_service: Optional GenerationService instance for response synthesis.
-        """
         self.retrieval_service = retrieval_service or RetrievalService()
         self.generation_service = generation_service or GenerationService()
 
@@ -54,19 +50,8 @@ class RAGService:
         question: str,
         top_k: Optional[int] = None,
     ) -> RAGAnswer:
-        """Answer a question using retrieved grounding context.
+        """Answer a question using retrieved grounding context."""
 
-        Args:
-            question: The user query string.
-            top_k: Optional number of top similar chunks to retrieve.
-
-        Returns:
-            RAGAnswer containing cleaned question, generated answer, and sources.
-
-        Raises:
-            ValueError: If the question is not a non-empty string.
-            RuntimeError: If retrieval or generation fails.
-        """
         if not isinstance(question, str) or not question.strip():
             raise ValueError("Question must be a non-empty string.")
 
@@ -77,23 +62,30 @@ class RAGService:
             top_k=top_k,
         )
 
-        chunks: List[RetrievedChunk] = (
-            retrieval_result.results
-            if hasattr(retrieval_result, "results")
-            else (retrieval_result or [])
-        )
+        chunks = self._normalize_results(retrieval_result)
 
         prompt_contexts: List[PromptContext] = []
         sources: List[RAGSource] = []
 
         for chunk in chunks:
-            metadata = chunk.metadata if hasattr(chunk, "metadata") and chunk.metadata else {}
+            metadata = (
+                chunk.metadata
+                if hasattr(chunk, "metadata") and chunk.metadata
+                else {}
+            )
 
-            source_filename = str(metadata.get("source_filename", "") or "")
+            source_filename = str(
+                metadata.get("source_filename", "") or ""
+            )
 
             chunk_index_raw = metadata.get("chunk_index", -1)
+
             try:
-                chunk_index = int(chunk_index_raw) if chunk_index_raw is not None else -1
+                chunk_index = (
+                    int(chunk_index_raw)
+                    if chunk_index_raw is not None
+                    else -1
+                )
             except (ValueError, TypeError):
                 chunk_index = -1
 
@@ -111,7 +103,7 @@ class RAGService:
                     text=chunk.text,
                     source_filename=source_filename,
                     chunk_index=chunk_index,
-                    distance=float(chunk.distance),
+                    distance=self._result_score(chunk),
                 )
             )
 
@@ -124,4 +116,33 @@ class RAGService:
             question=cleaned_question,
             answer=generated_answer,
             sources=sources,
+        )
+
+    @staticmethod
+    def _normalize_results(retrieval_result: Any) -> List[Any]:
+        """Normalize supported retrieval result containers."""
+
+        if hasattr(retrieval_result, "results"):
+            return list(retrieval_result.results)
+
+        if isinstance(retrieval_result, list):
+            return retrieval_result
+
+        if retrieval_result is None:
+            return []
+
+        raise ValueError("Unsupported retrieval result format.")
+
+    @staticmethod
+    def _result_score(result: Any) -> float:
+        """Extract a numeric retrieval score from a result."""
+
+        if hasattr(result, "distance"):
+            return float(result.distance)
+
+        if hasattr(result, "score"):
+            return float(result.score)
+
+        raise ValueError(
+            "Retrieval result must provide either distance or score."
         )
