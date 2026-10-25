@@ -1,7 +1,7 @@
 """Service for executing configured RAG experiments."""
 
 from time import perf_counter
-from typing import Any, Optional
+from typing import Optional
 
 try:
     from backend.app.configured_retrieval_service import ConfiguredRetrievalService
@@ -85,6 +85,24 @@ class ExperimentExecutionService:
                 error_count=1,
                 metadata=self._build_metadata(config),
             )
+
+    def run_many(
+        self,
+        experiments,
+        dataset_name="golden",
+    ):
+        """Execute multiple configured experiments and return their results."""
+        results = []
+
+        for experiment_id, config in experiments:
+            result = self.run(
+                experiment_id=experiment_id,
+                config=config,
+                dataset_name=dataset_name,
+            )
+            results.append(result)
+
+        return results
 
     def _get_evaluation_service(self, config: ExperimentConfig):
         if self.evaluation_service is not None:

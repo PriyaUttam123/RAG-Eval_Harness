@@ -258,3 +258,56 @@ def test_run_keeps_run_metadata_when_execution_fails():
 
     assert result.run_metadata.experiment_id == "exp-007"
     assert result.run_metadata.dataset_name == "holdout"
+
+def test_run_many_executes_multiple_experiments():
+    evaluation_service = FakeEvaluationService()
+    experiment_service = FakeExperimentService()
+
+    service = ExperimentExecutionService(
+        evaluation_service=evaluation_service,
+        experiment_service=experiment_service,
+    )
+
+    experiments = [
+        ("exp-vector", make_config()),
+        ("exp-hybrid", make_config()),
+        ("exp-reranked", make_config()),
+    ]
+
+    results = service.run_many(experiments)
+
+    assert len(results) == 3
+    assert all(isinstance(result, ExperimentResult) for result in results)
+
+    assert results[0].run_metadata.experiment_id == "exp-vector"
+    assert results[1].run_metadata.experiment_id == "exp-hybrid"
+    assert results[2].run_metadata.experiment_id == "exp-reranked"
+
+
+def test_run_many_preserves_experiment_order():
+    evaluation_service = FakeEvaluationService()
+    experiment_service = FakeExperimentService()
+
+    service = ExperimentExecutionService(
+        evaluation_service=evaluation_service,
+        experiment_service=experiment_service,
+    )
+
+    experiments = [
+        ("exp-003", make_config()),
+        ("exp-001", make_config()),
+        ("exp-002", make_config()),
+    ]
+
+    results = service.run_many(experiments)
+
+    assert [
+        result.run_metadata.experiment_id
+        for result in results
+    ] == [
+        "exp-003",
+        "exp-001",
+        "exp-002",
+    ]
+
+
