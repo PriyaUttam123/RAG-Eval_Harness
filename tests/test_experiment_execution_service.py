@@ -310,4 +310,78 @@ def test_run_many_preserves_experiment_order():
         "exp-002",
     ]
 
+def test_run_many_preserves_retrieval_strategy_configuration():
+    evaluation_service = FakeEvaluationService()
+    experiment_service = FakeExperimentService()
 
+    service = ExperimentExecutionService(
+        evaluation_service=evaluation_service,
+        experiment_service=experiment_service,
+    )
+
+    vector_config = make_config()
+    vector_config.retrieval_strategy = "vector"
+    vector_config.reranking_enabled = False
+
+    hybrid_config = make_config()
+    hybrid_config.retrieval_strategy = "hybrid"
+    hybrid_config.reranking_enabled = False
+
+    reranked_config = make_config()
+    reranked_config.retrieval_strategy = "hybrid"
+    reranked_config.reranking_enabled = True
+
+    experiments = [
+        ("exp-vector", vector_config),
+        ("exp-hybrid", hybrid_config),
+        ("exp-reranked", reranked_config),
+    ]
+
+    results = service.run_many(experiments)
+
+    assert len(results) == 3
+
+    assert results[0].metadata["retrieval_strategy"] == "vector"
+    assert results[0].metadata["reranking_enabled"] is False
+
+    assert results[1].metadata["retrieval_strategy"] == "hybrid"
+    assert results[1].metadata["reranking_enabled"] is False
+
+    assert results[2].metadata["retrieval_strategy"] == "hybrid"
+    assert results[2].metadata["reranking_enabled"] is True
+
+def test_run_many_passes_each_configuration_to_metadata():
+    evaluation_service = FakeEvaluationService()
+    experiment_service = FakeExperimentService()
+
+    service = ExperimentExecutionService(
+        evaluation_service=evaluation_service,
+        experiment_service=experiment_service,
+    )
+
+    vector_config = make_config()
+
+    hybrid_config = make_config()
+    hybrid_config.retrieval_strategy = "hybrid"
+
+    reranked_config = make_config()
+    reranked_config.retrieval_strategy = "hybrid"
+    reranked_config.reranking_enabled = True
+
+    experiments = [
+        ("exp-vector", vector_config),
+        ("exp-hybrid", hybrid_config),
+        ("exp-reranked", reranked_config),
+    ]
+
+    results = service.run_many(experiments)
+
+    assert [result.run_metadata.experiment_id for result in results] == [
+        "exp-vector",
+        "exp-hybrid",
+        "exp-reranked",
+    ]
+
+    assert results[0].run_metadata.config == vector_config
+    assert results[1].run_metadata.config == hybrid_config
+    assert results[2].run_metadata.config == reranked_config
