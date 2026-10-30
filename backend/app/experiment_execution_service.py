@@ -106,6 +106,14 @@ class ExperimentExecutionService:
         dataset_name="golden",
     ):
         """Execute multiple configured experiments and return their results."""
+        if (
+            not isinstance(dataset_name, str)
+            or dataset_name.strip().lower() not in {"golden", "holdout"}
+        ):
+            raise ValueError(
+                f"Invalid dataset_name '{dataset_name}'. Must be 'golden' or 'holdout'."
+            )
+
         results = []
 
         for experiment_id, config in experiments:
