@@ -2,6 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from backend.app.failure_analysis import FailureAnalysis
 
 from backend.app.api.routes import evaluation as evaluation_route
 from backend.app.evaluation_report import (
@@ -29,6 +30,10 @@ def _make_sample_report(k: int = 2, total: int = 3) -> EvaluationReport:
             average_completeness=0.8,
             average_overall=0.85,
             total_cases=total,
+        ),
+        failure_analysis=FailureAnalysis(
+            failures=[],
+            total_failures=0,
         ),
         total_cases=total,
     )
@@ -226,6 +231,10 @@ def test_response_structure_matches_evaluation_report(monkeypatch):
     assert "average_groundedness" in data["answer_quality"]
     assert "average_completeness" in data["answer_quality"]
     assert "average_overall" in data["answer_quality"]
+
+    assert "failure_analysis" in data
+    assert "failures" in data["failure_analysis"]
+    assert "total_failures" in data["failure_analysis"]
 
 
 def test_openapi_paths_include_evaluation_run():

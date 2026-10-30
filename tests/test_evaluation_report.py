@@ -10,6 +10,7 @@ from backend.app.evaluation_report import (
     EvaluationReportBuilder,
 )
 from backend.app.evaluation_runner import EvaluationResult, EvaluationRunResult
+from backend.app.failure_analysis import EvaluationFailure, FailureAnalysis
 from backend.app.retrieval_evaluator import RetrievalEvaluation, RetrievalEvaluator
 
 
@@ -96,6 +97,10 @@ def test_perfect_combined_report():
     assert report.answer_quality.average_completeness == pytest.approx(1.0)
     assert report.answer_quality.average_overall == pytest.approx(1.0)
     assert report.answer_quality.total_cases == 2
+
+    # Failure analysis
+    assert report.failure_analysis.total_failures == 0
+    assert report.failure_analysis.failures == []
 
 
 def test_partial_retrieval_and_partial_answer_quality():
@@ -201,6 +206,10 @@ def test_empty_evaluation_run():
     assert report.answer_quality.average_groundedness == 0.0
     assert report.answer_quality.average_completeness == 0.0
     assert report.answer_quality.average_overall == 0.0
+
+    # Failure analysis
+    assert report.failure_analysis.total_failures == 0
+    assert report.failure_analysis.failures == []
 
 
 def test_mismatched_answer_quality_score_count_raises_value_error():
@@ -363,3 +372,203 @@ def test_integration_full_report_composition():
 
     # Overall report
     assert report.total_cases == 2
+
+    # Failure analysis
+    assert report.failure_analysis.total_failures == 0
+    assert report.failure_analysis.failures == []
+
+
+def test_failure_analysis_execution_error():
+    """Verify execution errors produce an execution_error failure with details."""
+    result = _make_result(
+        retrieved_chunk_ids=["chunk-1"],
+        relevant_chunk_ids=["chunk-1"],
+        question="What is the process?",
+        expected_answer="Follow steps A and B.",
+        actual_answer="",
+        error="LLM service timeout after 30s",
+    )
+    run_result = _make_run([result])
+    scores = [
+        AnswerQualityScore(
+            correctness=0.0,
+            groundedness=0.0,
+            completeness=0.0,
+            overall=0.0,
+            explanation="Failed due to timeout",
+        )
+    ]
+
+    builder = EvaluationReportBuilder()
+    report = builder.build(run_result, scores, retrieval_k=1)
+
+    assert report.failure_analysis.total_failures == 1
+    assert len(report.failure_analysis.failures) == 1
+
+    failure = report.failure_analysis.failures[0]
+    assert isinstance(failure, EvaluationFailure)
+    assert failure.case_id == "case-001"
+    assert failure.question == "What is the process?"
+    assert failure.expected_answer == "Follow steps A and B."
+    assert failure.actual_answer == ""
+    assert failure.failure_type == "execution_error"
+    assert failure.error_message == "LLM service timeout after 30s"
+    assert failure.retrieved_chunk_ids == ["chunk-1"]
+    assert failure.answer_quality_score == pytest.approx(0.0)
+
+
+def test_failure_analysis_retrieval_failure():
+    """Verify missing expected chunks produce a retrieval_failure."""
+    result = _make_result(
+        retrieved_chunk_ids=["wrong-1", "wrong-2"],
+        relevant_chunk_ids=["expected-doc"],
+        question="What is the policy limit?",
+        expected_answer="Policy limit is $10,000.",
+        actual_answer="Policy limit is $10,000.",
+    )
+    run_result = _make_run([result])
+    scores = [
+        AnswerQualityScore(
+            correctness=0.9,
+            groundedness=0.8,
+            completeness=0.9,
+            overall=0.85,
+            explanation="Good answer despite retrieval",
+        )
+    ]
+
+    builder = EvaluationReportBuilder()
+    report = builder.build(run_result, scores, retrieval_k=2)
+
+    assert report.failure_analysis.total_failures == 1
+    assert len(report.failure_analysis.failures) == 1
+
+    failure = report.failure_analysis.failures[0]
+    assert failure.case_id == "case-001"
+    assert failure.failure_type == "retrieval_failure"
+    assert failure.error_message is None
+    assert failure.retrieved_chunk_ids == ["wrong-1", "wrong-2"]
+    assert failure.answer_quality_score == pytest.approx(0.85)
+
+
+def test_failure_analysis_low_answer_quality():
+    """Verify answer quality scores below 0.5 threshold produce an answer_quality failure."""
+    result = _make_result(
+        retrieved_chunk_ids=["correct-chunk"],
+        relevant_chunk_ids=["correct-chunk"],
+        question="What is the cancellation policy?",
+        expected_answer="Cancel within 14 days for a full refund.",
+        actual_answer="No refunds are allowed.",
+    )
+    run_result = _make_run([result])
+    scores = [
+        AnswerQualityScore(
+            correctness=0.2,
+            groundedness=0.4,
+            completeness=0.3,
+            overall=0.3,
+            explanation="Contradicts policy",
+        )
+    ]
+
+    builder = EvaluationReportBuilder()
+    report = builder.build(run_result, scores, retrieval_k=1)
+
+    assert report.failure_analysis.total_failures == 1
+    assert len(report.failure_analysis.failures) == 1
+
+    failure = report.failure_analysis.failures[0]
+    assert failure.case_id == "case-001"
+    assert failure.failure_type == "answer_quality"
+    assert failure.error_message is None
+    assert failure.retrieved_chunk_ids == ["correct-chunk"]
+    assert failure.answer_quality_score == pytest.approx(0.3)
+
+
+def test_failure_analysis_quality_threshold_boundary():
+    """Verify score of 0.5 is not flagged, but score < 0.5 is flagged as answer_quality failure."""
+    results = [
+        _make_result(["c1"], ["c1"], question="Q1?"),
+        _make_result(["c2"], ["c2"], question="Q2?"),
+    ]
+    run_result = _make_run(results)
+    scores = [
+        AnswerQualityScore(correctness=0.5, groundedness=0.5, completeness=0.5, overall=0.5),
+        AnswerQualityScore(correctness=0.49, groundedness=0.49, completeness=0.49, overall=0.49),
+    ]
+
+    builder = EvaluationReportBuilder()
+    report = builder.build(run_result, scores, retrieval_k=1)
+
+    assert report.failure_analysis.total_failures == 1
+    assert len(report.failure_analysis.failures) == 1
+    assert report.failure_analysis.failures[0].case_id == "case-002"
+    assert report.failure_analysis.failures[0].failure_type == "answer_quality"
+    assert report.failure_analysis.failures[0].answer_quality_score == pytest.approx(0.49)
+
+
+def test_failure_analysis_mixed_failures_and_total_count():
+    """Verify report builder accurately tracks multiple mixed failure types and counts."""
+    results = [
+        # Case 1: execution error
+        _make_result(["c1"], ["c1"], error="Database unreachable"),
+        # Case 2: retrieval failure (relevant expected, but none retrieved)
+        _make_result(["wrong-doc"], ["target-doc"]),
+        # Case 3: answer quality failure
+        _make_result(["c3"], ["c3"]),
+        # Case 4: successful case
+        _make_result(["c4"], ["c4"]),
+    ]
+    run_result = _make_run(results)
+
+    scores = [
+        AnswerQualityScore(correctness=0.0, groundedness=0.0, completeness=0.0, overall=0.0),
+        AnswerQualityScore(correctness=0.9, groundedness=0.8, completeness=0.9, overall=0.85),
+        AnswerQualityScore(correctness=0.3, groundedness=0.3, completeness=0.3, overall=0.3),
+        AnswerQualityScore(correctness=0.95, groundedness=0.95, completeness=0.95, overall=0.95),
+    ]
+
+    builder = EvaluationReportBuilder()
+    report = builder.build(run_result, scores, retrieval_k=1)
+
+    assert report.total_cases == 4
+    assert report.failure_analysis.total_failures == 3
+    assert len(report.failure_analysis.failures) == 3
+
+    f1, f2, f3 = report.failure_analysis.failures
+    assert f1.case_id == "case-001"
+    assert f1.failure_type == "execution_error"
+    assert f1.error_message == "Database unreachable"
+
+    assert f2.case_id == "case-002"
+    assert f2.failure_type == "retrieval_failure"
+    assert f2.retrieved_chunk_ids == ["wrong-doc"]
+
+    assert f3.case_id == "case-003"
+    assert f3.failure_type == "answer_quality"
+    assert f3.answer_quality_score == pytest.approx(0.3)
+
+
+def test_failure_analysis_no_relevant_chunks_expected():
+    """Verify questions with no expected relevant chunks do not trigger retrieval failure."""
+    result = _make_result(
+        retrieved_chunk_ids=["chunk-x"],
+        relevant_chunk_ids=[],
+        question="General question?",
+        actual_answer="General answer.",
+    )
+    run_result = _make_run([result])
+    scores = [
+        AnswerQualityScore(
+            correctness=0.8,
+            groundedness=0.8,
+            completeness=0.8,
+            overall=0.8,
+        )
+    ]
+
+    builder = EvaluationReportBuilder()
+    report = builder.build(run_result, scores, retrieval_k=1)
+
+    assert report.failure_analysis.total_failures == 0
+    assert report.failure_analysis.failures == []

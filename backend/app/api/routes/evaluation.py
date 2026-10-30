@@ -14,10 +14,7 @@ except ImportError:
     from app.evaluation_service import EvaluationService
     from app.experiment_comparison import ExperimentComparisonService
     from app.experiment_models import ExperimentResult
-try:
-    from backend.app.evaluation_service import EvaluationService
-except ImportError:
-    from app.evaluation_service import EvaluationService
+
 
 
 router = APIRouter(prefix="/evaluation", tags=["Evaluation"])

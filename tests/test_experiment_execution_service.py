@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from backend.app.failure_analysis import FailureAnalysis
+
 from backend.app.evaluation_report import (
     AnswerQualityAggregate,
     EvaluationReport,
@@ -32,6 +34,7 @@ def make_config():
     )
 
 
+
 def make_report():
     retrieval = RetrievalEvaluation(
         k=3,
@@ -52,6 +55,10 @@ def make_report():
     return EvaluationReport(
         retrieval=retrieval,
         answer_quality=answer_quality,
+        failure_analysis=FailureAnalysis(
+            failures=[],
+            total_failures=0,
+        ),
         total_cases=4,
     )
 
@@ -235,8 +242,23 @@ def test_run_records_execution_failure():
     assert isinstance(result, ExperimentResult)
     assert result.error_count == 1
     assert result.report.total_cases == 0
+    assert result.report.retrieval.k > 0
+    assert result.report.failure_analysis.total_failures == 0
+    assert result.report.failure_analysis.failures == []
     assert result.duration_seconds is not None
     assert result.duration_seconds >= 0.0
+
+
+def test_empty_report_satisfies_pydantic_constraints():
+    """Verify _empty_report satisfies all constraints including k > 0 and valid FailureAnalysis."""
+    report = ExperimentExecutionService._empty_report()
+    assert isinstance(report, EvaluationReport)
+    assert report.total_cases == 0
+    assert report.retrieval.k == 1
+    assert report.retrieval.total_cases == 0
+    assert report.answer_quality.total_cases == 0
+    assert report.failure_analysis.total_failures == 0
+    assert report.failure_analysis.failures == []
 
 
 def test_run_keeps_run_metadata_when_execution_fails():

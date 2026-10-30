@@ -7,6 +7,7 @@ from backend.app.evaluation_report import (
 from backend.app.experiment_comparison import ExperimentComparisonService
 from backend.app.experiment_config import ExperimentConfig, ExperimentRunMetadata
 from backend.app.experiment_models import ExperimentResult
+from backend.app.failure_analysis import FailureAnalysis
 from backend.app.retrieval_evaluator import RetrievalEvaluation
 
 
@@ -47,6 +48,10 @@ def make_result(
             average_completeness=0.7,
             average_overall=0.8,
             total_cases=10,
+        ),
+        failure_analysis=FailureAnalysis(
+            failures=[],
+            total_failures=0,
         ),
         total_cases=10,
     )

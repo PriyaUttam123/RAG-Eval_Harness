@@ -11,6 +11,7 @@ from backend.app.experiment_config import (
     ExperimentRunMetadata,
 )
 from backend.app.experiment_models import ExperimentResult
+from backend.app.failure_analysis import FailureAnalysis
 from backend.app.retrieval_evaluator import RetrievalEvaluation
 
 
@@ -54,6 +55,10 @@ def make_report():
     return EvaluationReport(
         retrieval=retrieval,
         answer_quality=answer_quality,
+        failure_analysis=FailureAnalysis(
+            failures=[],
+            total_failures=0,
+        ),
         total_cases=0,
     )
 

@@ -3,28 +3,42 @@
 from time import perf_counter
 from typing import Optional
 
+
 try:
     from backend.app.configured_retrieval_service import ConfiguredRetrievalService
-    from backend.app.evaluation_report import AnswerQualityAggregate, EvaluationReport
+    from backend.app.evaluation_report import (
+        AnswerQualityAggregate,
+        EvaluationReport,
+    )
     from backend.app.evaluation_runner import EvaluationRunner
     from backend.app.evaluation_service import EvaluationService
     from backend.app.experiment_config import ExperimentConfig
     from backend.app.experiment_models import ExperimentResult
-    from backend.app.experiment_retrieval_service import ExperimentRetrievalService
+    from backend.app.experiment_retrieval_service import (
+        ExperimentRetrievalService,
+    )
     from backend.app.experiment_service import ExperimentService
     from backend.app.rag_service import RAGService
     from backend.app.retrieval_evaluator import RetrievalEvaluation
+    from backend.app.failure_analysis import FailureAnalysis
+
 except ImportError:
     from app.configured_retrieval_service import ConfiguredRetrievalService
-    from app.evaluation_report import AnswerQualityAggregate, EvaluationReport
+    from app.evaluation_report import (
+        AnswerQualityAggregate,
+        EvaluationReport,
+    )
     from app.evaluation_runner import EvaluationRunner
     from app.evaluation_service import EvaluationService
     from app.experiment_config import ExperimentConfig
     from app.experiment_models import ExperimentResult
-    from app.experiment_retrieval_service import ExperimentRetrievalService
+    from app.experiment_retrieval_service import (
+        ExperimentRetrievalService,
+    )
     from app.experiment_service import ExperimentService
     from app.rag_service import RAGService
     from app.retrieval_evaluator import RetrievalEvaluation
+    from app.failure_analysis import FailureAnalysis
 
 
 class ExperimentExecutionService:
@@ -136,6 +150,7 @@ class ExperimentExecutionService:
 
     @staticmethod
     def _empty_report():
+        """Return an empty report when experiment execution fails."""
         return EvaluationReport(
             retrieval=RetrievalEvaluation(
                 k=1,
@@ -150,6 +165,10 @@ class ExperimentExecutionService:
                 average_completeness=0.0,
                 average_overall=0.0,
                 total_cases=0,
+            ),
+            failure_analysis=FailureAnalysis(
+                failures=[],
+                total_failures=0,
             ),
             total_cases=0,
         )
